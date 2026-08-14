@@ -39,7 +39,7 @@ class UserService:
         return access_token, user
 
     async def create_user(self, data: CreateUserScheme) -> User:
-        if self.repo.get_by_email(data["email"]) is None:
+        if await self.repo.get_by_email(data.email) is not None:
             raise c_exp.UserAlreadyExistsError()
 
         hashed_password = hsp.hash_password(data.password)
