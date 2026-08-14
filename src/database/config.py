@@ -92,7 +92,7 @@ class AppConfig(BaseModel):
 
         allowed_extensions (set[str]): Allowed file upload extensions.
     """
-
+    debug_mode_drop_base: bool
     base_user_role_name: str
     default_role_id: int
 

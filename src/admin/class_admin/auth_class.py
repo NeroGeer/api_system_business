@@ -22,8 +22,9 @@ class AdminAuth(AuthenticationBackend):
     def __init__(self):
         super().__init__(secret_key=settings.jwt.secret_key)
 
-    async def login(self, request: Request) -> Response:
+    async def login(self, request: Request) -> bool:
         form = await request.form()
+
         email = form.get("username")
         password = form.get("password")
 
@@ -31,83 +32,52 @@ class AdminAuth(AuthenticationBackend):
 
         if not email or not password:
             logger.warning("[ADMIN LOGIN] missing credentials")
-            return RedirectResponse(
-                url=request.url_for("admin:login"), status_code=status.HTTP_302_FOUND
-            )
+            return False
 
         async with async_session() as session:
             serv_fact = build_service(repository_cls=UserRepository, service_cls=UserService, session=session)
             user = await serv_fact.get_user(email)
 
             if not user or not hsp.verify_password(password, user.hashed_password):
-                logger.warning(f"[ADMIN LOGIN] user not found email={email} or "
-                               f"invalid password user_id={user.id}")
+                logger.warning(f"[ADMIN LOGIN] user not found email={email}")
 
-                return RedirectResponse(request.url_for("admin:login"), status_code=302)
+                return False
 
             if not user.is_active or not has_permission(user, "admin.panel.access"):
                 logger.warning(f"[ADMIN LOGIN] inactive user_id={user.id}"
                                f" no permission user_id={user.id}")
-                return RedirectResponse(request.url_for("admin:login"), status_code=302)
+                return False
 
             logger.info(f"[ADMIN LOGIN] success user_id={user.id}")
 
-            access_token = str(await jwt_token.create_token({"sub": str(user.id)}))
-
-            response = RedirectResponse(
-                url=request.url_for("admin:index"), status_code=status.HTTP_302_FOUND
-            )
-
-            cookie.set_access_cookie(response, access_token)
-
             request.session["user_id"] = user.id
             request.session["user_email"] = user.email
-        return response
 
-    async def logout(self, request: Request) -> Response:
+        return True
+
+    async def logout(self, request: Request) -> bool:
 
         logger.info("[ADMIN LOGOUT] attempt")
-
-        refresh_token = request.cookies.get("refresh_token")
-
-        if refresh_token:
-            async with async_session() as session:
-                serv_token = build_service(service_cls=RefreshTokenService, repository_cls=RefreshTokenRepo,
-                                           session=session)
-                await serv_token.delete_refresh_token(token=refresh_token)
-                logger.info("[ADMIN LOGOUT] refresh token deleted")
-
-        response = RedirectResponse(
-            url=request.url_for("admin:login"), status_code=status.HTTP_302_FOUND
-        )
-
-        cookie.delete_refresh_cookie(response)
-        response.delete_cookie("access_token")
 
         request.session.clear()
 
         logger.info("[ADMIN LOGOUT] success")
 
-        return response
+        return True
 
     async def authenticate(self, request: Request) -> bool:
-        token = request.cookies.get("access_token")
-        if not token:
-            logger.debug("[ADMIN AUTH] no token")
+        user_id = request.session.get("user_id")
+
+        if not user_id:
+            logger.debug("[ADMIN AUTH] no user_id")
             return False
 
         try:
-            payload = jwt.decode(
-                token, settings.jwt.secret_key, algorithms=[settings.jwt.algorithm]
+            user_id = int(user_id)
+        except (ValueError, TypeError):
+            logger.warning(
+                f"[ADMIN AUTH] invalid user_id={user_id}"
             )
-
-            if payload.get("type") != "access":
-                logger.warning("[ADMIN AUTH] invalid token type")
-                return False
-
-            user_id = int(payload.get("sub"))
-        except (JWTError, ValueError, TypeError):
-            logger.warning("[ADMIN AUTH] token decode failed")
             return False
 
         async with async_session() as session:
@@ -117,9 +87,6 @@ class AdminAuth(AuthenticationBackend):
             logger.warning(f"[ADMIN AUTH] user not found id={user_id} "
                            f"no permission user_id={user_id}")
             return False
-
-        request.session["user_id"] = user.id
-        request.session["user_email"] = getattr(user, "email", None)
 
         logger.info(f"[ADMIN AUTH] success user_id={user.id}")
 

@@ -18,6 +18,7 @@ from src.route.route_task import route_task
 from src.route.route_team import route_team
 from src.route.route_user import route_user
 from src.exceptions.exceptions import AppError
+from src.database.config import settings
 
 
 # from starlette.staticfiles import StaticFiles
@@ -47,10 +48,11 @@ async def lifespan(app: FastAPI):
     Yields:
         None: Allows FastAPI to run while the lifespan context is active.
     """
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-        await conn.run_sync(Base.metadata.create_all)
-        await insert_rbac_data(conn)
+    if settings.app.debug_mode_drop_base:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+            await conn.run_sync(Base.metadata.create_all)
+            await insert_rbac_data(conn)
 
     try:
         await redis_client.ping()
