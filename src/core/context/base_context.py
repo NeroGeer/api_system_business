@@ -167,21 +167,25 @@ class BaseContext(Generic[F]):
 
         await serv_fact.get_team(team_id=team_id)
 
-        is_admin = has_role(user=user, roles={UserRole.admin})
-
-        is_team_role = await serv_fact.has_team_role(
-            user=user.id,
-            team_id=team_id,
-            roles=check_roles,
-        )
-
+        is_team_role = False
         is_executor = False
 
-        if check_executor:
-            if task_id is None:
-                raise c_exp.FilterContextError()
+        is_admin = has_role(user=user, roles={UserRole.admin})
 
-            is_executor = await serv_fact.check_executor(user_id=user.id, team_id=team_id, task_id=task_id)
+        if not is_admin:
+            is_team_role = await serv_fact.has_team_role(
+                user_id=user.id,
+                team_id=team_id,
+                roles=check_roles,
+            )
+
+            is_executor = False
+
+            if check_executor:
+                if task_id is None:
+                    raise c_exp.FilterContextError()
+
+                is_executor = await serv_fact.check_executor(user_id=user.id, team_id=team_id, task_id=task_id)
 
         if not (is_admin or is_team_role or is_executor):
             raise c_exp.ForbiddenError()

@@ -197,16 +197,7 @@ class TaskService:
 
         await self.ctx.require_admin_or_team_role_or_executor(check_executor=True)
 
-        if data.executor_user_id is not None:
-            await self.validate_user_in_team(
-                user_id=data.executor_user_id,
-                team_id=team_id
-            )
-
         task = await self.task_stmt(task_id=task_id, team_id=team_id)
-
-        task.executor_user_id = data.executor_user_id
-        task.status = self.resolve_task_status(data.executor_user_id)
 
         if data.description is not None:
             task.description = data.description
@@ -241,37 +232,65 @@ class TaskService:
 
         logger.debug(f"Updating task status: task_id={task_id}, user_id={user_id}")
 
-        await self.ctx.require_admin_or_team_role_or_executor()
-
+        result = await self.ctx.require_admin_or_team_role_or_executor(check_executor=True)
         task = await self.task_stmt(task_id=task_id, team_id=team_id)
+
+        is_current_executor = (task.executor_user_id == user_id)
 
         old_status = task.status
         new_status = data.status if data.status is not None else old_status
 
-        if old_status != StatusTask.closed and new_status == StatusTask.closed:
-            if data.grade is None:
-                raise c_exp.GradeDataError()
+        if is_current_executor and not (result.is_admin or result.is_team_role):
 
-            task.grade = data.grade
-            task.close_date = datetime.now(UTC)
+            if data.status is not None and data.status != old_status:
+                if data.status == StatusTask.review:
+                    task.status = data.status
 
-            logger.debug(f"Task closed: task_id={task.id}, grade={task.grade}")
+                elif data.status == StatusTask.open:
+                    task.last_executor_user_id = is_current_executor
+                    task.status = data.status
 
-        elif data.status == StatusTask.closed or new_status == StatusTask.closed:
-            if data.grade is None:
-                raise c_exp.GradeDataError()
-            task.grade = data.grade
+        elif result.is_admin or result.is_team_role:
 
-        elif old_status == StatusTask.closed and new_status in [
-            StatusTask.open,
-            StatusTask.work,
-        ]:
-            task.grade = None
-            task.close_date = None
-            logger.info(f"Task reopened: task_id={task.id}")
+            if data.executor_user_id is not None and task.executor_user_id != data.executor_user_id:
+                await self.validate_user_in_team(
+                    user_id=data.executor_user_id,
+                    team_id=team_id
+                )
+                task.executor_user_id = data.executor_user_id
+                task.status = StatusTask.work
+                task.grade = None
+                task.close_date = None
 
-        if data.status is not None:
-            task.status = data.status
+            elif old_status != StatusTask.closed and new_status == StatusTask.closed:
+                if data.grade is None:
+                    raise c_exp.GradeDataError()
+
+                task.grade = data.grade
+                task.status = new_status
+                task.close_date = datetime.now(UTC)
+
+                logger.debug(f"Task closed: task_id={task.id}, grade={task.grade}")
+
+            elif old_status == StatusTask.closed and new_status == StatusTask.closed:
+                if data.grade is None:
+                    raise c_exp.GradeDataError()
+                task.grade = data.grade
+
+            elif old_status == StatusTask.closed and new_status in [
+                StatusTask.open,
+                StatusTask.work,
+            ]:
+                task.grade = None
+                task.close_date = None
+                logger.info(f"Task reopened: task_id={task.id}")
+
+                if new_status == StatusTask.work:
+                    task.executor_user_id = task.last_executor_user_id
+
+                task.status = new_status
+        else:
+            raise c_exp.PermissionDeniedError()
 
         logger.debug(f"Task status updated: task_id={task.id}, status={task.status}")
 

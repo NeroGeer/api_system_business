@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict
 class StatusTask(str, Enum):
     open = "open"
     work = "work"
+    review = "review"
     closed = "closed"
 
 
@@ -52,12 +53,12 @@ class TaskCreateSchema(BaseModel):
 
 
 class UpdateTaskSchema(BaseModel):
-    executor_user_id: int | None = None
     description: str | None = None
     deadline: datetime | None = None
 
 
 class UpdateTaskStatusSchema(BaseModel):
+    executor_user_id: int | None = None
     status: StatusTask | None = None
     grade: GradeTask | None = None
 

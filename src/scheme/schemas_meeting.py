@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -17,6 +17,9 @@ class MeetingCreateSchema(BaseModel):
     def validate_time(self):
         if self.end_time <= self.start_time:
             raise ValueError("end_time must be after start_time")
+        if self.end_time - self.start_time > timedelta(hours=24):
+            raise ValueError("The duration between start_time and end_time cannot exceed 24 hours")
+
         return self
 
 
@@ -56,5 +59,7 @@ class MeetingUpdateSchema(BaseModel):
     def validate_time(self):
         if self.start_time and self.end_time:
             if self.end_time <= self.start_time:
-                raise ValueError("end_time must be greater than start_time")
+                raise ValueError("end_time must be after start_time")
+            if self.end_time - self.start_time > timedelta(hours=24):
+                raise ValueError("The duration between start_time and end_time cannot exceed 24 hours")
         return self

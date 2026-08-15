@@ -3,7 +3,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
-from src.scheme.schemas_team import CurrentTeamSchema, TeamMemberSchema
+from src.scheme.schemas_team import TeamMemberSchema
 
 
 class UserRole(str, Enum):
@@ -63,7 +63,6 @@ class LoginUserScheme(BaseUserSchema):
     email: EmailStr
     roles: List[RoleSchema]
 
-    current_team: Optional[CurrentTeamSchema] = None
     teams: List[TeamMemberSchema] = Field(
         default_factory=list, validation_alias="team_memberships"
     )

@@ -36,14 +36,16 @@ class TeamRepository:
         return await self.session.scalar(stmt)
 
     async def create(self, team: Team) -> Team | None:
-        if await self.session.execute(
-            select(Team).where(
-                or_(
-                    Team.name == team.name,
-                    Team.invite_code == team.invite_code
+        if (
+            await self.session.execute(
+                select(Team).where(
+                    or_(
+                        Team.name == team.name,
+                        Team.invite_code == team.invite_code
+                    )
                 )
             )
-        ):
+        ).scalar_one_or_none():
             return None
 
         self.session.add(team)

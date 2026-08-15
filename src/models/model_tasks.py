@@ -54,6 +54,7 @@ class Task(Base):
     executor_user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=True
     )
+    last_executor_user_id: Mapped[int | None] = mapped_column(nullable=True)
     description: Mapped[str] = mapped_column(String, nullable=False)
     status: Mapped[StatusTask] = mapped_column(
         Enum(StatusTask),
