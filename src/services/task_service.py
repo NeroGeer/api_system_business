@@ -266,6 +266,7 @@ class TaskService:
                 if data.grade is None:
                     raise c_exp.GradeDataError()
 
+                task.last_executor_user_id = task.executor_user_id
                 task.grade = data.grade
                 task.status = new_status
                 task.close_date = datetime.now(UTC)
@@ -277,16 +278,18 @@ class TaskService:
                     raise c_exp.GradeDataError()
                 task.grade = data.grade
 
-            elif old_status == StatusTask.closed and new_status in [
-                StatusTask.open,
-                StatusTask.work,
-            ]:
+            elif (old_status in [StatusTask.closed, StatusTask.review]
+                  and new_status in [StatusTask.open, StatusTask.work]):
+
                 task.grade = None
                 task.close_date = None
                 logger.info(f"Task reopened: task_id={task.id}")
 
                 if new_status == StatusTask.work:
                     task.executor_user_id = task.last_executor_user_id
+
+                elif new_status == StatusTask.open:
+                    task.executor_user_id = None
 
                 task.status = new_status
         else:
