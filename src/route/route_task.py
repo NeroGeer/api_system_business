@@ -35,20 +35,6 @@ async def get_all_task(
     return await serv_fact.get_tasks_or_task_by_id()
 
 
-@route_task.get("/{task_id}", status_code=200, response_model=TaskSchema)
-async def get_task_by_id(
-        ctx: Annotated[
-            BaseContext[TaskFilter],
-            Depends(build_context_with_filters(TaskFilter))
-        ],
-):
-    serv_fact = build_service(repository_cls=TaskRepository,
-                              service_cls=TaskService,
-                              session=ctx.session,
-                              ctx=ctx)
-    return await serv_fact.get_tasks_or_task_by_id()
-
-
 @route_task.get("/avg_grade", status_code=200, response_model=OutAVGGradeTaskSchema)
 async def get_avg_task_grade_by_user_id(
         ctx: Annotated[
@@ -61,6 +47,20 @@ async def get_avg_task_grade_by_user_id(
                               session=ctx.session,
                               ctx=ctx)
     return await serv_fact.get_avg_grade_task_make_date_range()
+
+
+@route_task.get("/{task_id}", status_code=200, response_model=TaskSchema)
+async def get_task_by_id(
+        ctx: Annotated[
+            BaseContext[TaskFilter],
+            Depends(build_context_with_filters(TaskFilter))
+        ],
+):
+    serv_fact = build_service(repository_cls=TaskRepository,
+                              service_cls=TaskService,
+                              session=ctx.session,
+                              ctx=ctx)
+    return await serv_fact.get_tasks_or_task_by_id()
 
 
 @route_task.post("/create-task", status_code=201, response_model=TaskSchema)
