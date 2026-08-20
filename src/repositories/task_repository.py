@@ -1,5 +1,5 @@
 from sqlalchemy import select, exists, and_, func
-from datetime import date
+from datetime import datetime, UTC, date
 
 from src.models.model_tasks import Task
 from src.database.database import SessionDep
@@ -27,7 +27,7 @@ class TaskRepository:
             start_dt: date | None = None,
             end_dt: date | None = None,
     ):
-        stmt = select(Task).where(Task.team_id == team_id)
+        stmt = select(Task).where(Task.team_id == team_id, Task.deleted_at.is_(None))
 
         if start_dt is not None and end_dt is not None:
             stmt = stmt.where(and_(Task.deadline >= start_dt, Task.deadline <= end_dt))
@@ -43,7 +43,7 @@ class TaskRepository:
 
         return await self.session.scalar(
             select(Task).where(
-                Task.id == task_id, Task.team_id == team_id
+                Task.id == task_id, Task.team_id == team_id, Task.deleted_at.is_(None),
             )
         )
 
@@ -61,6 +61,7 @@ class TaskRepository:
                 Task.executor_user_id == user_id,
                 Task.close_date >= start_dt,
                 Task.close_date < end_dt,
+                Task.deleted_at.is_(None),
             ))
 
         grade = avg_grade or 0.0
@@ -84,5 +85,5 @@ class TaskRepository:
         return task
 
     async def delete(self, task: Task) -> None:
-        await self.session.delete(task)
+        task.deleted_at = datetime.now(UTC)
         await self.session.commit()

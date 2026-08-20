@@ -54,6 +54,11 @@ class Task(Base):
     executor_user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=True
     )
+
+    executor: Mapped["User | None"] = relationship(
+        "User"
+    )
+
     last_executor_user_id: Mapped[int | None] = mapped_column(nullable=True)
     description: Mapped[str] = mapped_column(String, nullable=False)
     status: Mapped[StatusTask] = mapped_column(
@@ -61,13 +66,20 @@ class Task(Base):
         nullable=False,
     )
 
-    grade: Mapped[int] = mapped_column(default=None, nullable=True)
+    grade: Mapped[int | None] = mapped_column(default=None, nullable=True)
     deadline: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    close_date: Mapped[datetime] = mapped_column(
+    close_date: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, default=None
     )
     comment: Mapped[List["TaskComment"]] = relationship(
         back_populates="task", cascade="all, delete-orphan", lazy="selectin"
+    )
+
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        default=None,
+        index=True,
     )
 
     def __repr__(self):

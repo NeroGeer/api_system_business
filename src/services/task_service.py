@@ -3,7 +3,8 @@ from datetime import datetime, UTC
 from src.exceptions import exceptions as c_exp
 from src.logger.logger import logger
 from src.models.model_tasks import Task
-from src.scheme.schemas_task import StatusTask, TaskCreateSchema, UpdateTaskSchema, UpdateTaskStatusSchema
+from src.scheme.schemas_task import StatusTask, TaskCreateSchema, UpdateTaskSchema, UpdateTaskStatusSchema, \
+    UpdateTaskExecutorSchema
 from src.scheme.schemas_team import TeamRole
 from src.utils.utils import make_date_range, normalize_date_range
 
@@ -89,11 +90,11 @@ class TaskService:
 
         if executor_user_id is not None:
             await self.validate_user_in_team(
-                    user_id=executor_user_id,
-                    team_id=team_id
+                user_id=executor_user_id,
+                team_id=team_id
             )
 
-        tasks = self.repo.get(
+        tasks = await self.repo.get(
             team_id=team_id,
             executor_user_id=executor_user_id,
             start_dt=start_date, end_dt=end_date)
@@ -130,7 +131,7 @@ class TaskService:
         )
 
     async def create_task(
-        self, data: TaskCreateSchema
+            self, data: TaskCreateSchema
     ):
         """
         Author: NeroGeer
@@ -142,7 +143,6 @@ class TaskService:
         Rules:
             - only admin or team manager can create
             - executor must belong to team (if provided)
-            - status is auto-resolved
         """
 
         user_id = self.ctx.current_user.id
@@ -152,26 +152,31 @@ class TaskService:
 
         await self.ctx.require_admin_or_team_role_or_executor()
 
+        if data.status == StatusTask.work and data.executor_user_id is None:
+            raise c_exp.ExecutorDataError("A task cannot be in 'work' status without an executor.")
+
         if data.executor_user_id is not None:
             await self.validate_user_in_team(
                 user_id=data.executor_user_id,
                 team_id=team_id
             )
 
+        new_status = data.status if data.status is not None else StatusTask.open
+
         new_task = Task(
             team_id=team_id,
             executor_user_id=data.executor_user_id,
             description=data.description,
             deadline=data.deadline,
-            status=self.resolve_task_status(data.executor_user_id),
+            status=new_status,
         )
 
         logger.info(f"Task created: task_id={new_task.id}")
-        return await self.repo.create(new_task=new_task)
+        return await self.repo.create(data=new_task)
 
     async def update_task(
-        self,
-        data: UpdateTaskSchema,
+            self,
+            data: UpdateTaskSchema,
     ):
         """
         Updates task fields:
@@ -195,7 +200,7 @@ class TaskService:
 
         logger.debug(f"Updating task: task_id={task_id}, user_id={current_user.id}")
 
-        await self.ctx.require_admin_or_team_role_or_executor(check_executor=True)
+        await self.ctx.require_admin_or_team_role_or_executor()
 
         task = await self.task_stmt(task_id=task_id, team_id=team_id)
 
@@ -210,8 +215,8 @@ class TaskService:
         return await self.repo.update(task=task)
 
     async def update_task_status(
-        self,
-        data: UpdateTaskStatusSchema,
+            self,
+            data: UpdateTaskStatusSchema,
     ):
         """
         Author: NeroGeer
@@ -235,67 +240,134 @@ class TaskService:
         result = await self.ctx.require_admin_or_team_role_or_executor(check_executor=True)
         task = await self.task_stmt(task_id=task_id, team_id=team_id)
 
-        is_current_executor = (task.executor_user_id == user_id)
+        is_executor = task.executor_user_id == user_id
+        is_privileged = result.is_admin or result.is_team_role
 
         old_status = task.status
-        new_status = data.status if data.status is not None else old_status
+        new_status = data.status
+
+        if is_executor and not is_privileged:
+
+            if new_status is None:
+                raise c_exp.TaskStatusError()
+
+            executor_transitions: dict[StatusTask, set[StatusTask]] = {
+                StatusTask.work: {
+                    StatusTask.review,
+                    StatusTask.open,
+                },
+                StatusTask.open: {
+                    StatusTask.work,
+                },
+                StatusTask.review: {
+                    StatusTask.work,
+                },
+            }
+
+            if new_status not in executor_transitions.get(old_status, set()):
+                raise c_exp.TaskStatusError()
+
+            task.status = new_status
+
+        elif is_privileged:
+
+            if new_status is None:
+                if old_status != StatusTask.closed:
+                    raise c_exp.TaskStatusError()
+
+                if data.grade is None:
+                    raise c_exp.GradeDataError()
+
+                task.grade = data.grade
+
+            elif new_status == StatusTask.closed:
+                if data.grade is None:
+                    raise c_exp.GradeDataError()
+
+                task.grade = data.grade
+                task.status = new_status
+
+                if old_status != StatusTask.closed:
+                    task.close_date = datetime.now(UTC)
+
+                    logger.debug(f"Task closed: task_id={task.id}, grade={task.grade}")
+
+            elif old_status == StatusTask.closed:
+                if new_status not in (StatusTask.open, StatusTask.work):
+                    raise c_exp.TaskStatusError()
+
+                task.status = new_status
+                task.grade = None
+                task.close_date = None
+                logger.info(f"Task reopened: task_id={task.id}")
+
+            elif old_status == StatusTask.review and new_status == StatusTask.work:
+                task.status = new_status
+
+            elif old_status == StatusTask.open and new_status == StatusTask.work:
+                if task.executor_user_id is None:
+                    raise c_exp.ExecutorDataError()
+                task.status = new_status
+
+            elif old_status == StatusTask.work and new_status == StatusTask.open:
+                task.status = new_status
+
+            else:
+                raise c_exp.TaskStatusError()
+
+        else:
+            raise c_exp.PermissionDeniedError()
+
+        logger.debug(f"Task status updated: task_id={task.id}, status={task.status}")
+
+        return await self.repo.update(task=task)
+
+    async def update_task_executor(
+            self,
+            data: UpdateTaskExecutorSchema,
+    ):
+        """
+        Author: NeroGeer
+        GitHub: https://github.com/NeroGeer
+        License: MIT
+
+        Handles task Executor transitions.
+        """
+
+        user_id = self.ctx.current_user.id
+        team_id = self.ctx.scope.team_id
+        task_id = self.ctx.scope.task_id
+
+        logger.debug(f"Updating task Executor: task_id={task_id}, user_id={user_id}")
+
+        result = await self.ctx.require_admin_or_team_role_or_executor(check_executor=True)
+        task = await self.task_stmt(task_id=task_id, team_id=team_id)
+
+        is_current_executor = (data.executor_user_id == user_id)
 
         if is_current_executor and not (result.is_admin or result.is_team_role):
-
-            if data.status is not None and data.status != old_status:
-                if data.status == StatusTask.review:
-                    task.status = data.status
-
-                elif data.status == StatusTask.open:
-                    task.last_executor_user_id = is_current_executor
-                    task.status = data.status
+            if task.executor_user_id is None and task.status == StatusTask.open:
+                task.executor_user_id = user_id
 
         elif result.is_admin or result.is_team_role:
-
-            if data.executor_user_id is not None and task.executor_user_id != data.executor_user_id:
+            if task.status == StatusTask.open and data.executor_user_id is not None:
                 await self.validate_user_in_team(
                     user_id=data.executor_user_id,
                     team_id=team_id
                 )
                 task.executor_user_id = data.executor_user_id
-                task.status = StatusTask.work
-                task.grade = None
-                task.close_date = None
 
-            elif old_status != StatusTask.closed and new_status == StatusTask.closed:
-                if data.grade is None:
-                    raise c_exp.GradeDataError()
-
-                task.last_executor_user_id = task.executor_user_id
-                task.grade = data.grade
-                task.status = new_status
-                task.close_date = datetime.now(UTC)
-
-                logger.debug(f"Task closed: task_id={task.id}, grade={task.grade}")
-
-            elif old_status == StatusTask.closed and new_status == StatusTask.closed:
-                if data.grade is None:
-                    raise c_exp.GradeDataError()
-                task.grade = data.grade
-
-            elif (old_status in [StatusTask.closed, StatusTask.review]
-                  and new_status in [StatusTask.open, StatusTask.work]):
-
-                task.grade = None
-                task.close_date = None
-                logger.info(f"Task reopened: task_id={task.id}")
-
-                if new_status == StatusTask.work:
-                    task.executor_user_id = task.last_executor_user_id
-
-                elif new_status == StatusTask.open:
+            elif task.status == StatusTask.open and data.executor_user_id is None:
+                if task.executor_user_id is not None:
+                    task.last_executor_user_id = task.executor_user_id
                     task.executor_user_id = None
+                else:
+                    raise c_exp.ExecutorDataError()
 
-                task.status = new_status
         else:
             raise c_exp.PermissionDeniedError()
 
-        logger.debug(f"Task status updated: task_id={task.id}, status={task.status}")
+        logger.debug(f"Task Executor updated: task_id={task.id}, Executor={task.executor_user_id}")
 
         return await self.repo.update(task=task)
 
@@ -311,7 +383,7 @@ class TaskService:
             dict: Confirmation message
         """
 
-        user_id = self.ctx.current_user
+        user_id = self.ctx.current_user.id
         team_id = self.ctx.scope.team_id
         task_id = self.ctx.scope.task_id
 
@@ -322,6 +394,8 @@ class TaskService:
         await self.ctx.require_admin_or_team_role_or_executor()
 
         task = await self.task_stmt(task_id=task_id, team_id=team_id)
+        if task.status not in (StatusTask.open, StatusTask.closed):
+            raise c_exp.TaskStatusError()
 
         await self.repo.delete(task=task)
         logger.debug(f"Task deleted: task_id={task_id}, team_id={team_id}")

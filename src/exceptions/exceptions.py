@@ -114,6 +114,11 @@ class EmptyDataError(AppError):
     detail = "No data to update"
 
 
+class ExecutorDataError(AppError):
+    status_code = 400
+    detail = "Cannot unassign executor: the task has no assigned executor."
+
+
 class GradeDataError(AppError):
     status_code = 400
     detail = "Grade is required when closing a task."
@@ -147,3 +152,8 @@ class InvalidTimeRangeError(AppError):
 class TeamRequiredError(AppError):
     status_code = 400
     detail = "team_id required"
+
+
+class TaskStatusError(AppError):
+    status_code = 400
+    detail = "Invalid status transition"
