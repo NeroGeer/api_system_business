@@ -33,10 +33,18 @@ class CommentCreateSchema(BaseModel):
     text: str
 
 
+class ExecutorSchema(BaseModel):
+    id: int
+    email: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class TaskSchema(BaseModel):
     id: int
     team_id: int
-    executor_user_id: int | None
+    executor_user_id: int | None = None
+    executor: ExecutorSchema | None = None
     description: str
     status: StatusTask
     deadline: datetime
@@ -49,6 +57,7 @@ class TaskSchema(BaseModel):
 class TaskCreateSchema(BaseModel):
     executor_user_id: int | None = None
     description: str
+    status: StatusTask
     deadline: datetime
 
 
@@ -58,9 +67,12 @@ class UpdateTaskSchema(BaseModel):
 
 
 class UpdateTaskStatusSchema(BaseModel):
-    executor_user_id: int | None = None
     status: StatusTask | None = None
     grade: GradeTask | None = None
+
+
+class UpdateTaskExecutorSchema(BaseModel):
+    executor_user_id: int | None = None
 
 
 class OutAVGGradeTaskSchema(BaseModel):

@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import select, exists
 
 from src.database.database import SessionDep
 from src.models.model_team import TeamMember, Team

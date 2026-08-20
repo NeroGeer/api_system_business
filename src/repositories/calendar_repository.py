@@ -33,6 +33,9 @@ class CalendarRepository:
             self, teams_ids: List[int], start_dt: date, end_dt: date
     ):
         tasks_stmt = select(Task).where(
-            Task.team_id.in_(teams_ids), Task.deadline >= start_dt, Task.deadline < end_dt
+            Task.team_id.in_(teams_ids),
+            Task.deadline >= start_dt,
+            Task.deadline < end_dt,
+            Task.deleted_at.is_(None),
         )
         return (await self.session.scalars(tasks_stmt)).all()

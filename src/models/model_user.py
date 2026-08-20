@@ -8,6 +8,7 @@ from src.models.model_base import Base
 if TYPE_CHECKING:
     from src.models.model_meeting import Meeting, MeetingParticipant
     from src.models.model_team import TeamMember
+    from src.models.model_tasks import Task
 
 from dataclasses import dataclass
 
@@ -108,6 +109,12 @@ class User(Base):
 
     meeting_participations: Mapped[List["MeetingParticipant"]] = relationship(
         back_populates="user", lazy="selectin"
+    )
+
+    tasks: Mapped[list["Task"]] = relationship(
+        "Task",
+        back_populates="executor",
+        foreign_keys="Task.executor_user_id",
     )
 
     def __repr__(self) -> str:
