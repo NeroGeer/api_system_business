@@ -1,7 +1,8 @@
-from sqlalchemy import select
+from sqlalchemy import exists, select
 
 from src.database.database import SessionDep
 from src.models.model_team import TeamMember, Team
+from src.models.model_tasks import Task
 
 
 class ContextRepository:
