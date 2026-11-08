@@ -29,7 +29,7 @@ class Task(Base):
             Task description.
 
         status (StatusTask):
-            Current status of the task (e.g. TODO, IN_PROGRESS, DONE).
+            Current status of the task (e.g.).
 
         grade (int | None):
             Evaluation score for completed task.
@@ -60,6 +60,7 @@ class Task(Base):
     )
 
     last_executor_user_id: Mapped[int | None] = mapped_column(nullable=True)
+    title: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str] = mapped_column(String, nullable=False)
     status: Mapped[StatusTask] = mapped_column(
         Enum(StatusTask),

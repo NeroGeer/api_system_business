@@ -166,6 +166,7 @@ class TaskService:
         new_task = Task(
             team_id=team_id,
             executor_user_id=data.executor_user_id,
+            title=data.title,
             description=data.description,
             deadline=data.deadline,
             status=new_status,
@@ -246,7 +247,7 @@ class TaskService:
         old_status = task.status
         new_status = data.status
 
-        if is_executor and not is_privileged:
+        if is_executor:
 
             if new_status is None:
                 raise c_exp.TaskStatusError()
@@ -269,7 +270,7 @@ class TaskService:
 
             task.status = new_status
 
-        elif is_privileged:
+        if is_privileged:
 
             if new_status is None:
                 if old_status != StatusTask.closed:

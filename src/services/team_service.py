@@ -88,7 +88,7 @@ class TeamService:
                 role=TeamRole.employee
             )
 
-        return await self.repo.add_member(member)
+        return await self.repo.add_member(member=member)
 
     async def add_members_team(
             self, data: AddTeamMemberSchema
@@ -119,7 +119,7 @@ class TeamService:
 
         member = TeamMember(user_id=data.user_id, team_id=team_id, role=TeamRole.employee)
 
-        return await self.repo.add_member(team_id=team_id, member=member)
+        return await self.repo.add_member(member=member)
 
     async def update_member_role(self, data: UpdateTeamMemberRoleSchema):
         """

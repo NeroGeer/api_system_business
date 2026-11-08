@@ -46,6 +46,7 @@ class TaskSchema(BaseModel):
     executor_user_id: int | None = None
     executor: ExecutorSchema | None = None
     description: str
+    title: str
     status: StatusTask
     deadline: datetime
     grade: GradeTask | None = None
@@ -57,6 +58,7 @@ class TaskSchema(BaseModel):
 class TaskCreateSchema(BaseModel):
     executor_user_id: int | None = None
     description: str
+    title: str
     status: StatusTask
     deadline: datetime
 
