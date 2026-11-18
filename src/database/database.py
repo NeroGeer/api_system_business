@@ -1,5 +1,7 @@
+import json
 from enum import Enum
-from typing import Annotated, Type
+from typing import Annotated, Type, Callable, Awaitable, Any
+from datetime import datetime, UTC, date
 
 from fastapi import Depends
 from redis.asyncio import Redis
@@ -73,6 +75,9 @@ class RedisKeys(str, Enum):
     """
 
     TASK_COMMENTS = "task:{task_id}:comments"
+    TASK_STAGE = "task:{task_id}:stage"
+    STAGE_TRANSACTION = "task:{task_id}:stage:transactions"
+    TEAM_STAGE_TRANSITIONS = "team:{team_id}:stage:transitions"
 
     def format(self, **kwargs):
         """
@@ -85,3 +90,108 @@ class RedisKeys(str, Enum):
             str: Fully formatted Redis key.
         """
         return self.value.format(**kwargs)
+
+
+class RedisStageService:
+
+    CACHE_TTL = 3600
+
+    def __init__(self, redis: Redis):
+        self.redis = redis
+
+    @staticmethod
+    def _json_default(value):
+        if isinstance(value, (datetime, date)):
+            return value.isoformat()
+
+        if isinstance(value, Enum):
+            return value.value
+
+        raise TypeError(
+            f"Object of type {type(value).__name__} "
+            "is not JSON serializable"
+        )
+
+    async def _get_or_set(
+        self,
+        key: str,
+        loader: Callable[[], Awaitable[Any]],
+    ) -> Any:
+        cached = await self.redis.get(key)
+
+        if cached is not None:
+            return json.loads(cached)
+
+        data = await loader()
+
+        await self.redis.set(
+            key,
+            json.dumps(
+                data,
+                ensure_ascii=False,
+                default=self._json_default,
+            ),
+            ex=self.CACHE_TTL,
+        )
+
+        return data
+
+    async def get_task_transactions(
+        self,
+        task_id: int,
+        loader: Callable[[], Awaitable[list]],
+    ) -> list:
+
+        key = RedisKeys.STAGE_TRANSACTION.format(
+            task_id=task_id
+        )
+
+        return await self._get_or_set(key, loader)
+
+    async def invalidate_task_transactions(
+        self,
+        task_id: int,
+    ) -> None:
+
+        key = RedisKeys.STAGE_TRANSACTION.format(
+            task_id=task_id
+        )
+
+        await self.redis.delete(key)
+
+    async def get_team_transitions(
+        self,
+        team_id: int,
+        loader: Callable[[], Awaitable[list]],
+    ) -> list:
+
+        key = RedisKeys.TEAM_STAGE_TRANSITIONS.format(
+            team_id=team_id
+        )
+
+        return await self._get_or_set(key, loader)
+
+    async def invalidate_team_transitions(
+        self,
+        team_id: int,
+    ) -> None:
+
+        key = RedisKeys.TEAM_STAGE_TRANSITIONS.format(
+            team_id=team_id
+        )
+
+        await self.redis.delete(key)
+
+    async def invalidate_team_stage_cache(
+        self,
+        team_id: int,
+    ) -> None:
+
+        keys = [
+            RedisKeys.TEAM_STAGE_TRANSITIONS.format(
+                team_id=team_id
+            )
+        ]
+
+        if keys:
+            await self.redis.delete(*keys)

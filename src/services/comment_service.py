@@ -6,7 +6,6 @@ from src.logger.logger import logger
 from src.models.model_tasks import Task, TaskComment
 from src.scheme.schemas_task import CommentCreateSchema, CommentSchema
 from src.scheme.schemas_team import TeamRole
-from src.core.context.base_context import BaseContext
 
 
 class CommentService:
@@ -15,7 +14,7 @@ class CommentService:
         self.ctx = context
 
     async def validate_task(self, task_id: int):
-        task = await self.repo.validate_task_id(Task, task_id)
+        task = await self.repo.validate_task_id(task_id=task_id)
         if task is None:
             raise c_exp.TaskNotFoundError()
         return task

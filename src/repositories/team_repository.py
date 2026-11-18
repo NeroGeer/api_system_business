@@ -3,6 +3,8 @@ from sqlalchemy.orm import selectinload
 
 from src.database.database import SessionDep
 from src.models.model_team import Team, TeamMember
+from src.models.model_tasks import TeamTaskStage
+from src.scheme.schemas_task_stage import StageType
 
 
 class TeamRepository:
@@ -37,18 +39,37 @@ class TeamRepository:
 
     async def create(self, team: Team) -> Team | None:
         if (
-            await self.session.execute(
-                select(Team).where(
-                    or_(
-                        Team.name == team.name,
-                        Team.invite_code == team.invite_code
+                await self.session.execute(
+                    select(Team).where(
+                        or_(
+                            Team.name == team.name,
+                            Team.invite_code == team.invite_code
+                        )
                     )
                 )
-            )
         ).scalar_one_or_none():
             return None
 
         self.session.add(team)
+
+        await self.session.flush()
+
+        stages = [
+            TeamTaskStage(
+                team_id=team.id,
+                name="Open",
+                stage_type=StageType.OPEN,
+                position=0,
+            ),
+            TeamTaskStage(
+                team_id=team.id,
+                name="END",
+                stage_type=StageType.END,
+                position=1,
+            ),
+        ]
+        self.session.add_all(stages)
+
         await self.session.commit()
         await self.session.refresh(team)
         return team

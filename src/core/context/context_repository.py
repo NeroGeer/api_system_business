@@ -2,6 +2,7 @@ from sqlalchemy import select, exists
 
 from src.database.database import SessionDep
 from src.models.model_team import TeamMember, Team
+from src.models.model_tasks import Task
 
 
 class ContextRepository:
@@ -25,7 +26,7 @@ class ContextRepository:
         )
 
     async def check_executor(self, task_id: int, team_id: int, user_id: int):
-        return self.session.scalar(
+        return await self.session.scalar(
             select(
                 exists().where(
                     Task.id == task_id,
