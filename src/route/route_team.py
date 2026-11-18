@@ -1,8 +1,7 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 
-from src.logger.logger import logger
 from src.repositories.team_repository import TeamRepository
 from src.repositories.user_repository import UserRepository
 from src.services.user_service import UserService

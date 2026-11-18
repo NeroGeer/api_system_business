@@ -12,15 +12,16 @@ class TaskAdmin(ModelView, model=Task):
     column_list = [
         Task.id,
         Task.description,
+        Task.title,
         Task.team_id,
         Task.executor_user_id,
-        Task.status,
+        Task.stage_id,
         Task.deadline,
         Task.close_date,
     ]
 
     column_searchable_list = [
-        Task.status,
+        Task.stage_id,
         Task.description,
     ]
 

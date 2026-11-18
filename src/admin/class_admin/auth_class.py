@@ -1,19 +1,13 @@
-from fastapi import Request, Response, status
-from fastapi.responses import RedirectResponse
-from jose import JWTError, jwt
+from fastapi import Request
 from sqladmin.authentication import AuthenticationBackend
 
-from src.core.security import cookie
 from src.core.security import hash_password as hsp
-from src.core.security import jwt_token
 from src.core.security.rbac import has_permission
 from src.database.database import async_session, settings
 from src.logger.logger import logger
 from src.core.security.dependencies import get_user_by_id
 
-from src.repositories.refresh_token_repository import RefreshTokenRepo
 from src.repositories.user_repository import UserRepository
-from src.services.refresh_token_service import RefreshTokenService
 from src.services.user_service import UserService
 from src.core.context.base_context import build_service
 

@@ -1,11 +1,13 @@
 from datetime import UTC, datetime
 from typing import List
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String
+from sqlalchemy import (DateTime, ForeignKey, String, Enum as SAEnum,
+                        func, Index, text, UniqueConstraint,
+                        CheckConstraint, ForeignKeyConstraint, )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.models.model_base import Base
-from src.scheme.schemas_task import StatusTask
+from src.scheme.schemas_task_stage import StageType
 
 
 class Task(Base):
@@ -28,9 +30,6 @@ class Task(Base):
         description (str):
             Task description.
 
-        status (StatusTask):
-            Current status of the task (e.g.).
-
         grade (int | None):
             Evaluation score for completed task.
 
@@ -52,7 +51,12 @@ class Task(Base):
     )
 
     executor_user_id: Mapped[int | None] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=True
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+    stage_id: Mapped[int] = mapped_column(
+        nullable=False,
+        index=True,
     )
 
     executor: Mapped["User | None"] = relationship(
@@ -62,10 +66,6 @@ class Task(Base):
     last_executor_user_id: Mapped[int | None] = mapped_column(nullable=True)
     title: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str] = mapped_column(String, nullable=False)
-    status: Mapped[StatusTask] = mapped_column(
-        Enum(StatusTask),
-        nullable=False,
-    )
 
     grade: Mapped[int | None] = mapped_column(default=None, nullable=True)
     deadline: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -76,6 +76,12 @@ class Task(Base):
         back_populates="task", cascade="all, delete-orphan", lazy="selectin"
     )
 
+    created_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
@@ -83,8 +89,171 @@ class Task(Base):
         index=True,
     )
 
+    change_stage_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        onupdate=func.now(),
+        nullable=True,
+        default=None,
+        index=True,
+    )
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["team_id", "stage_id"],
+            ["team_task_stages.team_id", "team_task_stages.id"],
+            ondelete="RESTRICT",
+            name="fk_task_stage_same_team",
+        ),
+    )
+
     def __repr__(self):
         return f"Task({self.id}) description={self.description[:30]}"
+
+
+class TeamTaskStage(Base):
+    __tablename__ = "team_task_stages"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    team_id: Mapped[int] = mapped_column(
+        ForeignKey("teams.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    stage_type: Mapped[StageType] = mapped_column(
+        SAEnum(
+            StageType,
+            name="task_stage_type",
+            native_enum=False,
+            values_callable=lambda enum: [item.value for item in enum],
+        ),
+        nullable=False,
+    )
+    position: Mapped[int] = mapped_column(nullable=False)
+    created_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        onupdate=func.now(),
+        nullable=True,
+        default=None,
+        index=True,
+    )
+
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        default=None,
+    )
+
+    outgoing_transitions: Mapped[list["TeamStageTransition"]] = relationship(
+        "TeamStageTransition",
+        primaryjoin="and_(TeamTaskStage.team_id == TeamStageTransition.team_id, TeamTaskStage.id == "
+                    "TeamStageTransition.from_stage_id)",
+        foreign_keys="[TeamStageTransition.team_id, TeamStageTransition.from_stage_id]",
+        back_populates="from_stage",
+        overlaps="incoming_transitions,to_stage",
+    )
+    incoming_transitions: Mapped[list["TeamStageTransition"]] = relationship(
+        "TeamStageTransition",
+        primaryjoin="and_(TeamTaskStage.team_id == TeamStageTransition.team_id, TeamTaskStage.id == "
+                    "TeamStageTransition.to_stage_id)",
+        foreign_keys="[TeamStageTransition.team_id, TeamStageTransition.to_stage_id]",
+        back_populates="to_stage",
+        overlaps="outgoing_transitions,from_stage",
+    )
+
+    __table_args__ = (
+        # PostgreSQL deferrable constraint allows positions to be shifted
+        # without transient uniqueness collisions inside one transaction.
+        UniqueConstraint(
+            "team_id",
+            "id",
+            name="uq_team_task_stages_team_id_id"
+        ),
+
+        UniqueConstraint(
+            "team_id", "position",
+            name="uq_team_stage_position",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        Index(
+            "uq_team_open_stage", "team_id", unique=True,
+            postgresql_where=text("stage_type = 'OPEN' AND deleted_at IS NULL"),
+        ),
+        Index(
+            "uq_team_end_stage", "team_id", unique=True,
+            postgresql_where=text("stage_type = 'END' AND deleted_at IS NULL"),
+        ),
+        CheckConstraint("position >= 0", name="ck_team_stage_position"),
+        CheckConstraint(
+            "length(trim(name)) > 0",
+            name="ck_team_stage_name_not_empty",
+        ),
+    )
+
+
+class TeamStageTransition(Base):
+    __tablename__ = "team_stage_transitions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    team_id: Mapped[int] = mapped_column(
+        ForeignKey("teams.id", ondelete="CASCADE"), nullable=False
+    )
+    from_stage_id: Mapped[int] = mapped_column(nullable=False)
+    to_stage_id: Mapped[int] = mapped_column(nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    from_stage: Mapped["TeamTaskStage"] = relationship(
+        "TeamTaskStage",
+        primaryjoin="and_(TeamStageTransition.team_id == TeamTaskStage.team_id, TeamStageTransition.from_stage_id == "
+                    "TeamTaskStage.id)",
+        foreign_keys="[TeamStageTransition.team_id, TeamStageTransition.from_stage_id]",
+        back_populates="outgoing_transitions",
+        overlaps="incoming_transitions,to_stage",
+    )
+    to_stage: Mapped["TeamTaskStage"] = relationship(
+        "TeamTaskStage",
+        primaryjoin="and_(TeamStageTransition.team_id == TeamTaskStage.team_id, TeamStageTransition.to_stage_id == "
+                    "TeamTaskStage.id)",
+        foreign_keys="[TeamStageTransition.team_id, TeamStageTransition.to_stage_id]",
+        back_populates="incoming_transitions",
+        overlaps="outgoing_transitions,from_stage",
+    )
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["team_id", "from_stage_id"],
+            ["team_task_stages.team_id", "team_task_stages.id"],
+            ondelete="CASCADE",
+            name="fk_transition_from_stage_same_team",
+        ),
+        ForeignKeyConstraint(
+            ["team_id", "to_stage_id"],
+            ["team_task_stages.team_id", "team_task_stages.id"],
+            ondelete="CASCADE",
+            name="fk_transition_to_stage_same_team",
+        ),
+        UniqueConstraint(
+            "team_id",
+            "from_stage_id",
+            "to_stage_id",
+            name="uq_team_stage_transition",
+        ),
+        CheckConstraint(
+            "from_stage_id <> to_stage_id",
+            name="ck_stage_transition_not_self",
+        ),
+    )
 
 
 class TaskComment(Base):

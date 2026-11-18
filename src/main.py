@@ -17,6 +17,7 @@ from src.route.route_meeting import route_meeting
 from src.route.route_task import route_task
 from src.route.route_team import route_team
 from src.route.route_user import route_user
+from src.route.route_team_task_stage import route_stage
 from src.exceptions.exceptions import AppError
 from src.database.config import settings
 
@@ -67,7 +68,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan,
               title="API System Business",
-              version="1.0.0",
+              version="1.2.0",
               contact={
                   "name": "NeroGeer",
                   "url": "https://github.com/NeroGeer",
@@ -86,6 +87,7 @@ app.include_router(route_meeting)
 app.include_router(route_task)
 app.include_router(route_comment)
 app.include_router(route_calendar)
+app.include_router(route_stage)
 
 
 @app.exception_handler(AppError)

@@ -18,6 +18,15 @@ class UserAlreadyExistsError(AppError):
     status_code = 409
     detail = "Email already registered"
 
+class InvalidStageOperationError(AppError):
+    status_code = 409
+    detail = "Invalid stage operation"
+
+
+class StageInUseError(AppError):
+    status_code = 409
+    detail = "Stage is in use"
+
 
 class TeamMemberAlreadyExistsError(AppError):
     status_code = 409
@@ -32,6 +41,11 @@ class UserNotFoundError(AppError):
 class TeamNotFoundError(AppError):
     status_code = 404
     detail = "Team not found"
+
+
+class StageNotFoundError(AppError):
+    status_code = 404
+    detail = "Stage not found"
 
 
 class MemberNotFoundError(AppError):
@@ -117,6 +131,16 @@ class EmptyDataError(AppError):
 class ExecutorDataError(AppError):
     status_code = 400
     detail = "Cannot unassign executor: the task has no assigned executor."
+
+
+class InvalidWorkflowStructureError(AppError):
+    status_code = 400
+    detail = "Invalid workflow structure"
+
+
+class InvalidTransitionConfigurationError(AppError):
+    status_code = 400
+    detail = "Invalid workflow structure"
 
 
 class GradeDataError(AppError):

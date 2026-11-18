@@ -6,7 +6,6 @@ from src.logger.logger import logger
 from src.models.model_tasks import Task, TaskComment
 from src.scheme.schemas_task import CommentCreateSchema, CommentSchema
 from src.scheme.schemas_team import TeamRole
-from src.core.context.base_context import BaseContext
 
 
 class CommentService:

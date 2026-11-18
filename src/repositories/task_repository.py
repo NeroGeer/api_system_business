@@ -1,7 +1,7 @@
 from sqlalchemy import select, exists, and_, func
 from datetime import datetime, UTC, date
 
-from src.models.model_tasks import Task
+from src.models.model_tasks import Task, TeamTaskStage, TeamStageTransition
 from src.database.database import SessionDep
 from src.models.model_team import TeamMember
 
@@ -87,3 +87,37 @@ class TaskRepository:
     async def delete(self, task: Task) -> None:
         task.deleted_at = datetime.now(UTC)
         await self.session.commit()
+
+    async def get_stage_id_for_task(
+        self, team_id: int, stage_id: int
+    ):
+        result = await self.session.execute(
+            select(TeamTaskStage).where(
+                TeamTaskStage.team_id == team_id,
+                TeamTaskStage.id == stage_id,
+                TeamTaskStage.deleted_at.is_(None)
+            )
+        )
+        return result
+
+    async def get_stages_for_task(self, team_id: int):
+        result = await self.session.execute(
+            select(TeamTaskStage)
+            .where(
+                TeamTaskStage.team_id == team_id,
+                TeamTaskStage.deleted_at.is_(None))
+            .order_by(TeamTaskStage.position.asc())
+        )
+        return result
+
+    async def get_list_transitions_for_task(self, team_id: int):
+        result = await self.session.execute(
+            select(TeamStageTransition)
+            .where(TeamStageTransition.team_id == team_id)
+            .order_by(
+                TeamStageTransition.from_stage_id,
+                TeamStageTransition.to_stage_id,
+            )
+        )
+
+        return result

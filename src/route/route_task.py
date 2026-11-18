@@ -9,7 +9,7 @@ from src.scheme.schemas_task import (
     TaskCreateSchema,
     TaskSchema,
     UpdateTaskSchema,
-    UpdateTaskStatusSchema, UpdateTaskExecutorSchema,
+    UpdateTaskStageSchema, UpdateTaskExecutorSchema,
 )
 from src.core.context.base_context import (
     BaseContext,
@@ -101,7 +101,7 @@ async def update_task_by_id_status(
             BaseContext,
             Depends(build_context_with_filters())
         ],
-        data: UpdateTaskStatusSchema,
+        data: UpdateTaskStageSchema,
 ):
     serv_fact = build_service(repository_cls=TaskRepository,
                               service_cls=TaskService,

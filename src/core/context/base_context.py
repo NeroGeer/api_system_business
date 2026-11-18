@@ -19,6 +19,7 @@ from src.scheme.schemas_user import UserRole
 class Scope(BaseModel):
     team_id: int | None = None
     task_id: int | None = None
+    stage_id: int | None = None
     user_id: int | None = None
     comment_id: int | None = None
     meeting_id: int | None = None
@@ -27,6 +28,7 @@ class Scope(BaseModel):
 def build_scope(
         team_id: int | None = None,
         task_id: int | None = None,
+        stage_id: int | None = None,
         user_id: int | None = None,
         comment_id: int | None = None,
         meeting_id: int | None = None,
@@ -34,6 +36,7 @@ def build_scope(
     return Scope(
         team_id=team_id,
         task_id=task_id,
+        stage_id= stage_id,
         user_id=user_id,
         comment_id=comment_id,
         meeting_id=meeting_id,
